@@ -25,6 +25,13 @@ type UserCreate struct {
 	Email_Verified string
 }
 
+type PostCreate struct {
+	Id     uint
+	UserId uint
+	Url    string
+	Title  string
+	Body   string
+}
 type UserUpdate struct {
 	Email       string
 	Password    string
@@ -40,7 +47,12 @@ type Service interface {
 	VerifyUserAndUpdate(token string) (*models.User, error)
 	CreateUser(user UserCreate) (*models.User, error)
 	UpdateUser(id uint, userData UserUpdate) (*models.User, error)
+	UpdatePost(postdata PostCreate) (*models.Post, error)
 	DeleteUser(id uint) (*models.User, error)
+	FindUserByToken(token string) (*models.User, error)
+	CreatePost(postdata PostCreate) (*models.Post, error)
+	FindPostById(postdata PostCreate) (*models.Post, error)
+	AllPost(postdata PostCreate) ([]models.Post, error)
 	AutoMigrate() error // Add this line
 }
 
@@ -77,6 +89,42 @@ func (s *service) FindUserByEmail(email string, password string) (*models.User, 
 	return &user, nil
 }
 
+func (s *service) FindUserByToken(token string) (*models.User, error) {
+	var user models.User
+	result := s.db.Where("token = ?", token).First(&user)
+	if result.Error != nil {
+		if result.Error == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, result.Error
+	}
+
+	return &user, nil
+}
+
+func (s *service) FindPostById(postdata PostCreate) (*models.Post, error) {
+	var post models.Post
+
+	result := s.db.Where("id = ?", postdata.Id).First(&post)
+	if result.Error != nil {
+		if result.Error == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, result.Error
+	}
+
+	return &post, nil
+}
+
+func (s *service) AllPost(postdata PostCreate) ([]models.Post, error) {
+	var posts []models.Post
+	result := s.db.Find(&posts)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	return posts, nil
+}
+
 func (s *service) VerifyUserAndUpdate(token string) (*models.User, error) {
 	var user models.User
 
@@ -101,25 +149,6 @@ func (s *service) VerifyUserAndUpdate(token string) (*models.User, error) {
 	return &user, nil
 }
 
-// func (s *service) UpdateUserEmail(id uint, email string) (*models.User, error) {
-// 	var user models.User
-
-// 	// Fix: Add & before user in First()
-// 	if err := s.db.First(&user, id).Error; err != nil {
-// 		if err == gorm.ErrRecordNotFound {
-// 			return nil, nil
-// 		}
-// 		return nil, err
-// 	}
-
-// 	// Simplified update
-// 	if err := s.db.Model(&user).Update("email", email).Error; err != nil {
-// 		return nil, err
-// 	}
-
-// 	return &user, nil
-// }
-
 func (s *service) UpdateUser(id uint, userData UserUpdate) (*models.User, error) {
 	var user models.User
 
@@ -140,6 +169,25 @@ func (s *service) UpdateUser(id uint, userData UserUpdate) (*models.User, error)
 
 	return &user, nil
 }
+
+func (s *service) UpdatePost(postdata PostCreate) (*models.Post, error) {
+	post := &models.Post{
+		Url:   postdata.Url,
+		Title: postdata.Title,
+		Body:  postdata.Body,
+	}
+	result := s.db.Model(&models.Post{}).Where("id = ?", postdata.UserId).Updates(map[string]interface{}{
+		"url":   postdata.Url,
+		"title": postdata.Title,
+		"body":  postdata.Body,
+	})
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	return post, nil
+}
+
+// -----------------Create --------------------
 func (s *service) CreateUser(userData UserCreate) (*models.User, error) {
 	user := &models.User{
 		Email:       userData.Email,
@@ -154,6 +202,21 @@ func (s *service) CreateUser(userData UserCreate) (*models.User, error) {
 		return nil, result.Error
 	}
 	return user, nil
+}
+
+func (s *service) CreatePost(postdata PostCreate) (*models.Post, error) {
+	post := &models.Post{
+		UserID: postdata.UserId,
+		Url:    postdata.Url,
+		Title:  postdata.Title,
+		Body:   postdata.Body,
+	}
+
+	result := s.db.Create(post)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	return post, nil
 }
 
 var (

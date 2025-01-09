@@ -2,6 +2,7 @@ package server
 
 import (
 	"Video_to_text/internal/controllers" // Ensure this matches your project structure
+	"Video_to_text/internal/middleware"
 
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
@@ -19,18 +20,23 @@ func (s *FiberServer) RegisterFiberRoutes() {
 
 	// Initialize auth controller
 	authController := controllers.NewAuthController(s.db)
+	PostController := controllers.NewPostController(s.db)
 
 	// Auth routes
 	auth := s.App.Group("/auth")
+	Api := s.App.Group("/api")
+	// Public routes
 	auth.Post("/register", authController.Register)
 	auth.Post("/login", authController.Login)
+	auth.Get("/verify", authController.VerifyEmail)
+	auth.Get("/ResetPassword", authController.ResetPassword)
+
+	// Protected routes
+	auth.Use(middleware.AuthRequired())
+	auth.Get("/ForgotPassword", authController.ResetPassword)
 	auth.Post("/updateUser", authController.UpdateUser)
 	auth.Post("/deleteUser", authController.DeleteUser)
-	// auth.Post("/forgot-password", authController.ForgotPassword)
-
-	auth.Get("/verify", authController.VerifyEmail)
-
-	// auth.Get("/reset", authController.ResetPassword)
+	Api.Get("/Url", PostController.CreatePost)
 
 	// Existing routes...
 	s.App.Get("/", s.HelloWorldHandler)

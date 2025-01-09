@@ -304,24 +304,8 @@ func (ac *AuthController) Login(c *fiber.Ctx) error {
 }
 
 func (ac *AuthController) DeleteUser(c *fiber.Ctx) error {
-	authHeader := c.Get("Authorization")
-	if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "Missing or invalid Authorization header",
-		})
-	}
-
-	// Extract token
-	token := strings.TrimPrefix(authHeader, "Bearer ")
-
-	// Validate token and get claims
-	claims, err := utils.ValidateToken(token)
-	if err != nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "Invalid token",
-		})
-	}
-
+	// Get claims from context
+	claims := c.Locals("user").(*utils.Claims)
 	DeleteUser, err := ac.db.DeleteUser(claims.UserID)
 
 	if DeleteUser.Profile_Url != "" {
@@ -355,24 +339,8 @@ type UpdateRequest struct {
 }
 
 func (ac *AuthController) UpdateUser(c *fiber.Ctx) error {
-	// Get JWT from Authorization header
-	authHeader := c.Get("Authorization")
-	if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "Missing or invalid Authorization header",
-		})
-	}
-
-	// Extract token
-	token := strings.TrimPrefix(authHeader, "Bearer ")
-
-	// Validate token and get claims
-	claims, err := utils.ValidateToken(token)
-	if err != nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
-			"error": "Invalid token",
-		})
-	}
+	// Get claims from context
+	claims := c.Locals("user").(*utils.Claims)
 
 	// Parse request body
 	var req UpdateRequest
@@ -529,5 +497,36 @@ func (ac *AuthController) ForgotPassword(c *fiber.Ctx) error {
 
 	return c.Status(fiber.StatusOK).JSON(fiber.Map{
 		"message": "Password reset instructions sent to email",
+	})
+}
+
+func (ac *AuthController) ResetPassword(c *fiber.Ctx) error {
+	token := strings.TrimSpace(html.EscapeString(c.Query("token")))
+	if len(token) == 0 {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error": "Verification token is required",
+		})
+	}
+
+	User, err := ac.db.FindUserByToken(token)
+
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"error":  "Failed to verify email",
+			"detail": err.Error(),
+		})
+	}
+
+	JWT, err := utils.GenerateToken(User.ID, User.Profile_Url, User.Email, User.Name, User.Token)
+
+	return c.Status(fiber.StatusOK).JSON(fiber.Map{
+		"message": "Email updated successfully",
+		"NewJWT":  JWT,
+		"user": fiber.Map{
+			"id":         User.ID,
+			"email":      User.Email,
+			"Name":       User.Name,
+			"profileUrl": User.Profile_Url,
+		},
 	})
 }
