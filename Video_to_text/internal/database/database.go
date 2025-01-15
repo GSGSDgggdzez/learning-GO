@@ -53,6 +53,7 @@ type Service interface {
 	CreatePost(postdata PostCreate) (*models.Post, error)
 	FindPostById(postdata PostCreate) (*models.Post, error)
 	AllPost(postdata PostCreate) ([]models.Post, error)
+	DeletePost(id uint) (*models.Post, error)
 	AutoMigrate() error // Add this line
 }
 
@@ -170,22 +171,7 @@ func (s *service) UpdateUser(id uint, userData UserUpdate) (*models.User, error)
 	return &user, nil
 }
 
-func (s *service) UpdatePost(postdata PostCreate) (*models.Post, error) {
-	post := &models.Post{
-		Url:   postdata.Url,
-		Title: postdata.Title,
-		Body:  postdata.Body,
-	}
-	result := s.db.Model(&models.Post{}).Where("id = ?", postdata.UserId).Updates(map[string]interface{}{
-		"url":   postdata.Url,
-		"title": postdata.Title,
-		"body":  postdata.Body,
-	})
-	if result.Error != nil {
-		return nil, result.Error
-	}
-	return post, nil
-}
+// Duplicate UpdatePost method removed
 
 // -----------------Create --------------------
 func (s *service) CreateUser(userData UserCreate) (*models.User, error) {
@@ -217,6 +203,36 @@ func (s *service) CreatePost(postdata PostCreate) (*models.Post, error) {
 		return nil, result.Error
 	}
 	return post, nil
+}
+
+func (s *service) UpdatePost(postdata PostCreate) (*models.Post, error) {
+	var post models.Post
+	if err := s.db.First(&post, postdata.Id).Error; err != nil {
+		return nil, err
+	}
+
+	post.Url = postdata.Url
+	post.Title = postdata.Title
+	post.Body = postdata.Body
+
+	if err := s.db.Save(&post).Error; err != nil {
+		return nil, err
+	}
+
+	return &post, nil
+}
+
+func (s *service) DeletePost(id uint) (*models.Post, error) {
+	var post models.Post
+	if err := s.db.First(&post, id).Error; err != nil {
+		return nil, err
+	}
+
+	if err := s.db.Delete(&post).Error; err != nil {
+		return nil, err
+	}
+
+	return &post, nil
 }
 
 var (
