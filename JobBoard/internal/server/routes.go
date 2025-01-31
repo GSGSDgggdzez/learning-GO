@@ -1,6 +1,9 @@
 package server
 
 import (
+	controllers "JobBoard/internal/controller"
+	middleware "JobBoard/internal/middleware"
+
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 )
@@ -15,10 +18,19 @@ func (s *FiberServer) RegisterFiberRoutes() {
 		MaxAge:           300,
 	}))
 
+	authController := controllers.NewAuthController(s.db)
+	companyController := controllers.NewCompanyController(s.db)
+	auth := s.App.Group("/auth")
+
+	auth.Post("/register", authController.Register)
+	auth.Get("/verify", authController.VerifyEmail)
 	s.App.Get("/", s.HelloWorldHandler)
 
 	s.App.Get("/health", s.healthHandler)
 
+	// Company routes with authentication middleware
+	company := s.App.Group("/company", middleware.AuthRequired())
+	company.Post("/register", companyController.RegisterCompany)
 }
 
 func (s *FiberServer) HelloWorldHandler(c *fiber.Ctx) error {

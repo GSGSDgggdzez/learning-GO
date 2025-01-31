@@ -21,6 +21,7 @@ func (s *FiberServer) RegisterFiberRoutes() {
 
 	authController := controllers.NewAuthController(s.db)
 	GroupController := controllers.NewGroupController(s.db)
+	messageController := controllers.NewMessageController(s.db)
 	auth := s.App.Group("/auth")
 	Api := s.App.Group("/api")
 
@@ -39,6 +40,7 @@ func (s *FiberServer) RegisterFiberRoutes() {
 	Api.Post("/group/create", GroupController.Create)
 	Api.Get("/group/find/:id", GroupController.FindGroup)
 	Api.Delete("/group/delete/:id", GroupController.DeleteGroup)
+	Api.Post("/messages", messageController.CreateMessage)
 
 	s.App.Get("/", s.HelloWorldHandler)
 	s.App.Get("/health", s.healthHandler)

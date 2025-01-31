@@ -1,8 +1,8 @@
 package main
 
 import (
-	"JobBoard/internal/database"
-	"JobBoard/internal/server"
+	"AirBnb/internal/database"
+	"AirBnb/internal/server"
 	"context"
 	"fmt"
 	"log"

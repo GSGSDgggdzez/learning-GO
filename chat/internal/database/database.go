@@ -66,6 +66,8 @@ type Service interface {
 	// ---------create-------------------------------
 	CreateUser(user UserCreate) (*models.User, error)
 	CreateGroup(group GroupData) (*models.Group, error)
+	CreateMessage(data MessageData) (*models.Message, error)
+	CreateMessageAttachment(attachment *models.MessageAttachment) (*models.MessageAttachment, error)
 	// --------------------Verify -------------------
 	VerifyUserAndUpdate(token string) (*models.User, error)
 	// -----------------Delete-----------------------
@@ -158,6 +160,28 @@ func (s *service) CreateGroup(groupData GroupData) (*models.Group, error) {
 	}
 
 	return group, nil
+}
+
+func (s *service) CreateMessage(data MessageData) (*models.Message, error) {
+	message := &models.Message{
+		SenderId:   data.SenderId,
+		ReceiverId: data.ReceiverId,
+		Message:    data.Message,
+		GroupId:    data.GroupId,
+	}
+
+	if err := s.db.Create(message).Error; err != nil {
+		return nil, err
+	}
+
+	return message, nil
+}
+
+func (s *service) CreateMessageAttachment(attachment *models.MessageAttachment) (*models.MessageAttachment, error) {
+	if err := s.db.Create(attachment).Error; err != nil {
+		return nil, err
+	}
+	return attachment, nil
 }
 
 // ---------------------------------------------------------
