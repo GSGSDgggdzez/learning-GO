@@ -21,6 +21,7 @@ func (s *FiberServer) RegisterFiberRoutes() {
 	authController := controllers.NewAuthController(s.db)
 	propertiesController := controllers.NewPropertiesController(s.db)
 	favoritesController := controllers.NewFavoritesController(s.db)
+	reservationController := controllers.NewReservationController(s.db)
 
 	// Auth routes (public)
 	auth := s.App.Group("/auth")
@@ -36,21 +37,29 @@ func (s *FiberServer) RegisterFiberRoutes() {
 	// User management
 	api.Delete("/auth/delete/:ID", authController.DeleteUser)
 
-	// Property routes with authentication
+	// Property routes
 	properties := api.Group("/properties")
 	properties.Post("/register", propertiesController.RegisterProperty)
-	// In your routes configuration
 	properties.Get("/", propertiesController.GetAllProperties)
 	properties.Get("/:id", propertiesController.GetPropertyById)
 
-	// Property routes with both auth and owner verification
+	// Property routes with owner verification
 	propertyProtected := properties.Group("/:id", middleware.PropertyOwner(s.db))
 	propertyProtected.Delete("/", propertiesController.DeleteProperty)
 	propertyProtected.Put("/", propertiesController.UpdateProperty)
 
+	// Favorites routes
 	favorites := api.Group("/favorites")
 	favorites.Post("/:id", favoritesController.AddToFavorites)
 	favorites.Delete("/:id", favoritesController.DeleteFromFavorites)
+
+	// Reservation routes
+	reservations := api.Group("/reservations")
+	reservations.Post("/:id", reservationController.CreateReservation)
+
+	// Reservation routes with owner verification
+	reservationProtected := reservations.Group("/:id", middleware.ReservationOwner(s.db))
+	reservationProtected.Delete("/", reservationController.DeleteReservation)
 
 	// Health check and root routes
 	s.App.Get("/", s.HelloWorldHandler)

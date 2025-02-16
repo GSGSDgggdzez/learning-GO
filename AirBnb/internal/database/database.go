@@ -47,6 +47,31 @@ type Property struct {
 	Reservation   []models.Reservation
 }
 
+type Reservation struct {
+	ID             uint
+	StartDate      time.Time
+	EndDate        time.Time
+	NumberOfNights int
+	Guests         int
+	TotalPrice     float64
+	CreatedAt      time.Time
+	CreatedByID    uint
+	PropertyID     uint
+	CreatedBy      User
+	Property       Property
+}
+
+type ConversationMessage struct {
+	ID             uint
+	Body           string
+	ConversationID uint
+	CreatedByID    uint
+	SenderToID     uint
+	Conversation   models.Conversation
+	CreatedID      User
+	SentTo         User
+}
+
 // Service represents a service that interacts with a database.
 type Service interface {
 	// Health returns a map of health status information.
@@ -60,15 +85,20 @@ type Service interface {
 	FindUserByToken(token string) (*models.User, error)
 	FindPropertyById(Id int) (*models.Property, error)
 	FindAllProperties(page int, limit int) ([]models.Property, int64, error)
+	FindReservationById(id uint) (*models.Reservation, error)
+	FindOrCreateConversation(senderID, receiverID uint) (*models.Conversation, error)
 	//-----------------------Create ------------------------
 	CreateUser(user User) (*models.User, error)
 	CreateProperty(property Property) (*models.Property, error)
+	CreateReservation(reservation Reservation) (*models.Reservation, error)
 	AddFavoriteProperty(propertyId uint, userId uint) (*models.Property, error)
+	CreateConversationMessage(message ConversationMessage) (*models.ConversationMessage, error)
 	// --------------------Verify --------------------------
 	VerifyUserAndUpdate(token string) (*models.User, error)
 	// --------------------Delete---------------------------
 	DeleteUser(id string) (*models.User, error)
 	DeleteProperty(Id uint) (*models.Property, error)
+	DeleteReservation(id uint) (*models.Reservation, error)
 	DeleteFavoriteProperty(propertyId uint, userId uint) (*models.Property, error)
 	// ---------------------Update--------------------------
 	UpdateProperty(Id uint, property Property) (*models.Property, error)
@@ -96,6 +126,17 @@ func (s *service) FindUserByToken(token string) (*models.User, error) {
 		return nil, result.Error
 	}
 	return &user, nil
+}
+
+func (s *service) FindReservationById(id uint) (*models.Reservation, error) {
+	var reservation models.Reservation
+	result := s.db.Preload("CreatedBy").
+		Preload("Property").
+		Where("id = ?", id).First(&reservation)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	return &reservation, nil
 }
 
 func (s *service) FindPropertyById(Id int) (*models.Property, error) {
@@ -143,6 +184,22 @@ func (s *service) FindAllProperties(page int, limit int) ([]models.Property, int
 // ---------------------------------------
 // ----------------- Create ---------------
 // ----------------------------------------
+
+func (s *service) CreateConversationMessage(message database.ConversationMessage) (*models.ConversationMessage, error) {
+	NewMessage := &models.ConversationMessage{
+		Body:           message.Body,
+		ConversationID: message.ConversationID,
+		CreatedByID:    message.CreatedByID,
+		SentToID:       message.SentToID, // Ensure this is set
+	}
+
+	result := s.db.Create(NewMessage)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	return NewMessage, nil
+}
+
 func (s *service) CreateUser(user User) (*models.User, error) {
 	newUser := &models.User{
 		Email:    user.Email,
@@ -220,6 +277,61 @@ func (s *service) AddFavoriteProperty(propertyId uint, userId uint) (*models.Pro
 	return &property, nil
 }
 
+func (s *service) CreateReservation(reservation Reservation) (*models.Reservation, error) {
+	newReservation := &models.Reservation{
+		StartDate:      reservation.StartDate,
+		EndDate:        reservation.EndDate,
+		NumberOfNights: reservation.NumberOfNights,
+		Guests:         reservation.Guests,
+		TotalPrice:     reservation.TotalPrice,
+		CreatedByID:    reservation.CreatedByID,
+		PropertyID:     reservation.PropertyID,
+	}
+
+	result := s.db.Create(newReservation)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+
+	// Fetch the complete reservation with associations
+	var createdReservation models.Reservation
+	if err := s.db.Preload("CreatedBy").Preload("Property").First(&createdReservation, newReservation.ID).Error; err != nil {
+		return nil, err
+	}
+
+	return &createdReservation, nil
+}
+
+func (s *service) FindOrCreateConversation(senderID, receiverID uint) (*models.Conversation, error) {
+	var conversation models.Conversation
+
+	// Check if a conversation already exists between the two users
+	err := s.db.Joins("JOIN conversation_users ON conversation_users.conversation_id = conversations.id").
+		Where("conversation_users.user_id IN (?, ?)", senderID, receiverID).
+		Group("conversations.id").
+		Having("COUNT(DISTINCT conversation_users.user_id) = 2").
+		First(&conversation).Error
+
+	if err != nil && err != gorm.ErrRecordNotFound {
+		return nil, err
+	}
+
+	// If no conversation exists, create a new one
+	if err == gorm.ErrRecordNotFound {
+		conversation = models.Conversation{
+			Users: []models.User{
+				{ID: senderID},
+				{ID: receiverID},
+			},
+		}
+		if err := s.db.Create(&conversation).Error; err != nil {
+			return nil, err
+		}
+	}
+
+	return &conversation, nil
+}
+
 // ---------------------------------------------------------
 // -----------------VerifyUserAndUpdate --------------------
 // ---------------------------------------------------------
@@ -270,6 +382,25 @@ func (s *service) DeleteUser(id string) (*models.User, error) {
 	}
 
 	return &user, nil
+}
+
+func (s *service) DeleteReservation(id uint) (*models.Reservation, error) {
+	var reservation models.Reservation
+
+	result := s.db.Where("id = ?", id).First(&reservation)
+
+	if result.Error != nil {
+		if result.Error == gorm.ErrRecordNotFound {
+			return nil, nil
+		}
+		return nil, result.Error
+	}
+
+	if err := s.db.Delete(reservation).Error; err != nil {
+		return nil, err
+	}
+
+	return &reservation, nil
 }
 
 func (s *service) DeleteProperty(Id uint) (*models.Property, error) {
@@ -414,6 +545,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&models.Conversation{},
 		&models.Property{},
 		&models.Reservation{},
+		&models.ConversationMessage{},
 	)
 }
 
